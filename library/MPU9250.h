@@ -48,11 +48,18 @@ class MPU9250_
     float q[4] = {1.0f, 0.0f, 0.0f, 0.0f};    // vector to hold quaternion
     float pitch, yaw, roll;
     float a12, a22, a31, a32, a33;            // rotation matrix coefficients for Euler angles and gravity components
-    float lin_ax, lin_ay, lin_az;             // linear acceleration (acceleration with gravity component subtracted)
+    float lin_a[3];             // linear acceleration (acceleration with gravity component subtracted)
 
     QuaternionFilter qFilter;
 
-    float magnetic_declination = -7.51; // Japan, 24th June
+    float magnetic_declination = 0;//-7.51; // Japan, 24th June
+
+	// modification begins
+	// modified by tylim2946 on Jul 23, 2019
+	float app_a[3]; //applied acceleration = net acceleration - gravitational acceleration
+	float gravity = 9.81f; //value to be deducted
+	float gravity_calculated;
+	// end of modification
 
 public:
 
@@ -68,7 +75,7 @@ public:
         m_whoami = isConnectedMPU9250();
         if (m_whoami)
         {
-            Serial.println("MPU9250 is online...");
+            //Serial.println("MPU9250 is online..."); // modification by tylim2946: commented out
             initMPU9250();
 
             a_whoami = isConnectedAK8963();
@@ -102,16 +109,16 @@ public:
     bool isConnectedMPU9250()
     {
         byte c = readByte(MPU9250_ADDRESS, WHO_AM_I_MPU9250);
-        Serial.print("MPU9250 WHO AM I = ");
-        Serial.println(c, HEX);
+        //Serial.print("MPU9250 WHO AM I = "); // modification by tylim2946: commented out
+        //Serial.println(c, HEX); // modification by tylim2946: commented out
         return (c == MPU9250_WHOAMI_DEFAULT_VALUE);
     }
 
     bool isConnectedAK8963()
     {
         byte c = readByte(AK8963_ADDRESS, AK8963_WHO_AM_I);
-        Serial.print("AK8963  WHO AM I = ");
-        Serial.println(c, HEX);
+        //Serial.print("AK8963  WHO AM I = "); // modification by tylim2946: commented out
+        //Serial.println(c, HEX); // modification by tylim2946: commented out
         return (c == AK8963_WHOAMI_DEFAULT_VALUE);
     }
 
@@ -175,6 +182,17 @@ public:
     float getAcc(uint8_t i) const { return (i < 3) ? a[i] : 0.f; }
     float getGyro(uint8_t i) const { return (i < 3) ? g[i] : 0.f; }
     float getMag(uint8_t i) const { return (i < 3) ? m[i] : 0.f; }
+
+	// modification begins
+	// modified by tylim2946 on Jul 23, 2019
+	float getCalculatedGravity() const { return gravity_calculated; }
+
+	float getGravity() { return gravity; }
+	void setGravity(float v) { gravity = v; }
+	
+	float getAppAcc(uint8_t i) const { return (i < 3) ? app_a[i] : 0.0f; }
+	float getLinAcc(uint8_t i) const { return (i < 3) ? lin_a[i] : 0.0f; }
+	// end of modification
 
     float getAccBias(uint8_t i) const { return (i < 3) ? accelBias[i] : 0.f; }
     float getGyroBias(uint8_t i) const { return (i < 3) ? gyroBias[i] : 0.f; }
@@ -363,9 +381,18 @@ private:
         if      (yaw >= +180.f) yaw -= 360.f;
         else if (yaw <  -180.f) yaw += 360.f;
 
-        lin_ax = a[0] + a31;
-        lin_ay = a[1] + a32;
-        lin_az = a[2] - a33;
+        lin_a[0] = a[0] + a31;
+        lin_a[1] = a[1] + a32;
+        lin_a[2] = a[2] - a33;
+
+		// modification begins
+		// modified by tylim2946 on Jul 23, 2019
+		gravity_calculated = sqrtf(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]);
+
+		app_a[0] = a[0] - gravity * cosf(roll * PI / 180) * sinf(pitch * PI / 180);
+		app_a[1] = a[1] - gravity * sinf(roll * PI / 180);
+		app_a[2] = a[2] - gravity * cosf(roll * PI / 180) * cosf(pitch * PI / 180);
+		// end of modification
     }
 
     int16_t readTempData()
@@ -395,6 +422,7 @@ private:
         writeByte(AK8963_ADDRESS, AK8963_CNTL, (uint8_t)MFSSEL << 4 | Mmode); // Set magnetometer data resolution and sample ODR
         delay(10);
 
+		/*
         Serial.println("Calibration values: ");
         Serial.print("X-Axis sensitivity adjustment value "); Serial.println(destination[0], 2);
         Serial.print("Y-Axis sensitivity adjustment value "); Serial.println(destination[1], 2);
@@ -402,6 +430,7 @@ private:
         Serial.print("X-Axis sensitivity offset value "); Serial.println(magBias[0], 2);
         Serial.print("Y-Axis sensitivity offset value "); Serial.println(magBias[1], 2);
         Serial.print("Z-Axis sensitivity offset value "); Serial.println(magBias[2], 2);
+		*/
     }
 
     void magcalMPU9250(float * dest1, float * dest2)
